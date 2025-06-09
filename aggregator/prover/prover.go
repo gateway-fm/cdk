@@ -210,6 +210,8 @@ func (p *Prover) AggregatedProof(inputProof1, inputProof2 string) (*string, erro
 // FinalProof instructs the prover to generate a final proof for the given
 // input. It returns the ID of the proof being computed.
 func (p *Prover) FinalProof(inputProof string, aggregatorAddr string) (*string, error) {
+	p.logger.Debugf("Sending GenFinalProofRequest to a prover, inputProof: %s, aggregatorAddr: %s", inputProof, aggregatorAddr)
+
 	req := &AggregatorMessage{
 		Request: &AggregatorMessage_GenFinalProofRequest{
 			GenFinalProofRequest: &GenFinalProofRequest{
@@ -224,6 +226,8 @@ func (p *Prover) FinalProof(inputProof string, aggregatorAddr string) (*string, 
 	}
 
 	if msg, ok := res.Response.(*ProverMessage_GenFinalProofResponse); ok {
+		p.logger.Debugf("Received GenFinalProofResponse: %s", msg.GenFinalProofResponse.String())
+
 		switch msg.GenFinalProofResponse.Result {
 		case Result_RESULT_UNSPECIFIED:
 			return nil, fmt.Errorf("failed to generate final proof %s, %w, input %s",

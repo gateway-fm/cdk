@@ -408,13 +408,16 @@ func (a *Aggregator) Channel(stream prover.AggregatorService_ChannelServer) erro
 		select {
 		case <-a.ctx.Done():
 			// server disconnected
+			tmpLogger.Info("Server disconnected, aggregator's context was canceled")
 			return a.ctx.Err()
 		case <-ctx.Done():
 			// client disconnected
+			tmpLogger.Info("Client disconnected, connector's context was canceled")
 			return ctx.Err()
 
 		default:
-			if !a.halted.Load() {
+			halted := a.halted.Load()
+			if !halted {
 				isIdle, err := prover.IsIdle()
 				if err != nil {
 					tmpLogger.Errorf("Failed to check if prover is idle: %v", err)
@@ -449,6 +452,8 @@ func (a *Aggregator) Channel(stream prover.AggregatorService_ChannelServer) erro
 					// if no proof was generated (aggregated or batch) wait some time before retry
 					time.Sleep(a.cfg.RetryTime.Duration)
 				} // if proof was generated we retry immediately as probably we have more proofs to process
+			} else {
+				tmpLogger.Debug("aggregator is halted")
 			}
 		}
 	}
@@ -615,6 +620,7 @@ func (a *Aggregator) buildFinalProof(
 		"recursiveProofId", *proof.ProofID,
 		"batches", fmt.Sprintf("%d-%d", proof.BatchNumber, proof.BatchNumberFinal),
 	)
+	tmpLogger.Debug("buildFinalProof start")
 
 	finalProofID, err := prover.FinalProof(proof.Proof, a.cfg.SenderAddress)
 	if err != nil {
@@ -646,6 +652,7 @@ func (a *Aggregator) buildFinalProof(
 		finalProof.Public.NewStateRoot = rpcFinalBatch.StateRoot().Bytes()
 		finalProof.Public.NewLocalExitRoot = rpcFinalBatch.LocalExitRoot().Bytes()
 	}
+	tmpLogger.Debug("buildFinalProof end")
 
 	return finalProof, nil
 }
@@ -664,6 +671,7 @@ func (a *Aggregator) tryBuildFinalProof(ctx context.Context, prover ProverInterf
 		"proverAddr", prover.Addr(),
 	)
 	tmpLogger.Debug("tryBuildFinalProof start")
+	tmpLogger.Info("tryBuildFinalProof start")
 
 	if !a.canVerifyProof() {
 		tmpLogger.Debug("Time to verify proof not reached or proof verification in progress")
@@ -738,6 +746,7 @@ func (a *Aggregator) tryBuildFinalProof(ctx context.Context, prover ProverInterf
 	}
 
 	tmpLogger.Debug("tryBuildFinalProof end")
+	tmpLogger.Info("tryBuildFinalProof end")
 	return true, nil
 }
 
