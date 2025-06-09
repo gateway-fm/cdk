@@ -404,6 +404,8 @@ func (a *Aggregator) Channel(stream prover.AggregatorService_ChannelServer) erro
 		return err
 	}
 
+	lastHaltedTimestamp := time.Time{}
+
 	for {
 		select {
 		case <-a.ctx.Done():
@@ -418,6 +420,8 @@ func (a *Aggregator) Channel(stream prover.AggregatorService_ChannelServer) erro
 		default:
 			halted := a.halted.Load()
 			if !halted {
+				lastHaltedTimestamp = time.Time{}
+
 				isIdle, err := prover.IsIdle()
 				if err != nil {
 					tmpLogger.Errorf("Failed to check if prover is idle: %v", err)
@@ -453,7 +457,10 @@ func (a *Aggregator) Channel(stream prover.AggregatorService_ChannelServer) erro
 					time.Sleep(a.cfg.RetryTime.Duration)
 				} // if proof was generated we retry immediately as probably we have more proofs to process
 			} else {
-				tmpLogger.Debug("aggregator is halted")
+				if !lastHaltedTimestamp.IsZero() && time.Since(lastHaltedTimestamp) >= time.Minute {
+					tmpLogger.Warn("aggregator is halted for more than 1 minute")
+				}
+				lastHaltedTimestamp = time.Now()
 			}
 		}
 	}
