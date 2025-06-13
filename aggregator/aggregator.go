@@ -731,7 +731,7 @@ func (a *Aggregator) tryBuildFinalProof(ctx context.Context, prover ProverInterf
 			return false, fmt.Errorf("fv validate eligible final proof, %w", err)
 		}
 		if !eligible {
-			tmpLogger.Errorf("validateEligibleFinalProof: !eligible proof %v,%v, %s", proof, lastVerifiedBatchNumber, err.Error())
+			tmpLogger.Errorf("validateEligibleFinalProof: !eligible proof %v,%v, %s", proof, lastVerifiedBatchNumber)
 			return false, nil
 		}
 	}
