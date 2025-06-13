@@ -11,10 +11,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/0xPolygon/cdk/config/types"
-	"github.com/0xPolygon/cdk/log"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/iden3/go-iden3-crypto/poseidon"
+
+	"github.com/0xPolygon/cdk/config/types"
+	"github.com/0xPolygon/cdk/log"
 )
 
 const (
@@ -115,7 +116,7 @@ func (p *Prover) SupportsForkID(forkID uint64) bool {
 		return false
 	}
 
-	p.logger.Debugf("Prover %s supports fork ID %d", p.ID(), status.ForkId)
+	p.logger.Infof("Prover %s supports fork ID %d", p.ID(), status.ForkId)
 
 	return status.ForkId == forkID
 }
@@ -210,7 +211,7 @@ func (p *Prover) AggregatedProof(inputProof1, inputProof2 string) (*string, erro
 // FinalProof instructs the prover to generate a final proof for the given
 // input. It returns the ID of the proof being computed.
 func (p *Prover) FinalProof(inputProof string, aggregatorAddr string) (*string, error) {
-	p.logger.Debugf("Sending GenFinalProofRequest to a prover, inputProof: %s, aggregatorAddr: %s", inputProof, aggregatorAddr)
+	p.logger.Infof("Sending GenFinalProofRequest to a prover, inputProof: %s, aggregatorAddr: %s", inputProof, aggregatorAddr)
 
 	req := &AggregatorMessage{
 		Request: &AggregatorMessage_GenFinalProofRequest{
@@ -226,7 +227,7 @@ func (p *Prover) FinalProof(inputProof string, aggregatorAddr string) (*string, 
 	}
 
 	if msg, ok := res.Response.(*ProverMessage_GenFinalProofResponse); ok {
-		p.logger.Debugf("Received GenFinalProofResponse: %s", msg.GenFinalProofResponse.String())
+		p.logger.Infof("Received GenFinalProofResponse: %s", msg.GenFinalProofResponse.String())
 
 		switch msg.GenFinalProofResponse.Result {
 		case Result_RESULT_UNSPECIFIED:

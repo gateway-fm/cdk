@@ -16,16 +16,6 @@ import (
 	"unicode"
 
 	cdkTypes "github.com/0xPolygon/cdk-rpc/types"
-	"github.com/0xPolygon/cdk/agglayer"
-	"github.com/0xPolygon/cdk/aggregator/db/dbstorage"
-	ethmanTypes "github.com/0xPolygon/cdk/aggregator/ethmantypes"
-	"github.com/0xPolygon/cdk/aggregator/prover"
-	cdkcommon "github.com/0xPolygon/cdk/common"
-	"github.com/0xPolygon/cdk/config/types"
-	"github.com/0xPolygon/cdk/l1infotree"
-	"github.com/0xPolygon/cdk/log"
-	"github.com/0xPolygon/cdk/rpc"
-	"github.com/0xPolygon/cdk/state"
 	"github.com/0xPolygon/zkevm-ethtx-manager/ethtxmanager"
 	ethtxlog "github.com/0xPolygon/zkevm-ethtx-manager/log"
 	ethtxtypes "github.com/0xPolygon/zkevm-ethtx-manager/types"
@@ -38,6 +28,17 @@ import (
 	"google.golang.org/grpc"
 	grpchealth "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/peer"
+
+	"github.com/0xPolygon/cdk/agglayer"
+	"github.com/0xPolygon/cdk/aggregator/db/dbstorage"
+	ethmanTypes "github.com/0xPolygon/cdk/aggregator/ethmantypes"
+	"github.com/0xPolygon/cdk/aggregator/prover"
+	cdkcommon "github.com/0xPolygon/cdk/common"
+	"github.com/0xPolygon/cdk/config/types"
+	"github.com/0xPolygon/cdk/l1infotree"
+	"github.com/0xPolygon/cdk/log"
+	"github.com/0xPolygon/cdk/rpc"
+	"github.com/0xPolygon/cdk/state"
 )
 
 const (
@@ -430,7 +431,7 @@ func (a *Aggregator) Channel(stream prover.AggregatorService_ChannelServer) erro
 					continue
 				}
 				if !isIdle {
-					tmpLogger.Debug("Prover is not idle")
+					tmpLogger.Info("Prover is not idle")
 					time.Sleep(a.cfg.RetryTime.Duration)
 
 					continue
@@ -542,8 +543,8 @@ func (a *Aggregator) settleWithAggLayer(
 		return false
 	}
 
-	a.logger.Debug("final proof: %+v", tx)
-	a.logger.Debug("final proof signedTx: ", signedTx.Tx.ZKP.Proof.Hex())
+	a.logger.Infof("final proof: %+v", tx)
+	a.logger.Infof("final proof signedTx: ", signedTx.Tx.ZKP.Proof.Hex())
 	txHash, err := a.aggLayerClient.SendTx(*signedTx)
 	if err != nil {
 		if errors.Is(err, agglayer.ErrAgglayerRateLimitExceeded) {
@@ -556,7 +557,7 @@ func (a *Aggregator) settleWithAggLayer(
 	}
 
 	a.logger.Infof("tx %s sent to agglayer, waiting to be mined", txHash.Hex())
-	a.logger.Debugf("Timeout set to %f seconds", a.cfg.AggLayerTxTimeout.Duration.Seconds())
+	a.logger.Infof("Timeout set to %f seconds", a.cfg.AggLayerTxTimeout.Duration.Seconds())
 	waitCtx, cancelFunc := context.WithDeadline(ctx, time.Now().Add(a.cfg.AggLayerTxTimeout.Duration))
 	defer cancelFunc()
 	if err := a.aggLayerClient.WaitTxToBeMined(txHash, waitCtx); err != nil {
@@ -627,7 +628,7 @@ func (a *Aggregator) buildFinalProof(
 		"recursiveProofId", *proof.ProofID,
 		"batches", fmt.Sprintf("%d-%d", proof.BatchNumber, proof.BatchNumberFinal),
 	)
-	tmpLogger.Debug("buildFinalProof start")
+	tmpLogger.Info("buildFinalProof start")
 
 	finalProofID, err := prover.FinalProof(proof.Proof, a.cfg.SenderAddress)
 	if err != nil {
@@ -638,6 +639,8 @@ func (a *Aggregator) buildFinalProof(
 	tmpLogger.Infof("Final proof ID for batches [%d-%d]: %s", proof.BatchNumber, proof.BatchNumberFinal, *proof.ProofID)
 	tmpLogger = tmpLogger.WithFields("finalProofId", finalProofID)
 
+	tmpLogger.Info("init WaitFinalProof")
+
 	finalProof, err := prover.WaitFinalProof(ctx, *proof.ProofID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get final proof from prover: %w", err)
@@ -646,6 +649,9 @@ func (a *Aggregator) buildFinalProof(
 	// mock prover sanity check
 	if string(finalProof.Public.NewStateRoot) == mockedStateRoot &&
 		string(finalProof.Public.NewLocalExitRoot) == mockedLocalExitRoot {
+
+		tmpLogger.Infof("init rpcClient.GetBatch(%v)", proof.BatchNumberFinal)
+
 		// This local exit root and state root come from the mock
 		// prover, use the one captured by the executor instead
 		rpcFinalBatch, err := a.rpcClient.GetBatch(proof.BatchNumberFinal)
@@ -659,7 +665,7 @@ func (a *Aggregator) buildFinalProof(
 		finalProof.Public.NewStateRoot = rpcFinalBatch.StateRoot().Bytes()
 		finalProof.Public.NewLocalExitRoot = rpcFinalBatch.LocalExitRoot().Bytes()
 	}
-	tmpLogger.Debug("buildFinalProof end")
+	tmpLogger.Info("buildFinalProof end")
 
 	return finalProof, nil
 }
@@ -681,13 +687,14 @@ func (a *Aggregator) tryBuildFinalProof(ctx context.Context, prover ProverInterf
 	tmpLogger.Info("tryBuildFinalProof start")
 
 	if !a.canVerifyProof() {
-		tmpLogger.Debug("Time to verify proof not reached or proof verification in progress")
+		tmpLogger.Info("Time to verify proof not reached or proof verification in progress")
 		return false, nil
 	}
-	tmpLogger.Debug("Send final proof time reached")
+	tmpLogger.Info("Send final proof time reached")
 
 	lastVerifiedBatchNumber, err := a.etherman.GetLatestVerifiedBatchNum()
 	if err != nil {
+		tmpLogger.Errorf("GetLatestVerifiedBatchNum: err: %s", err.Error())
 		return false, err
 	}
 
@@ -697,10 +704,11 @@ func (a *Aggregator) tryBuildFinalProof(ctx context.Context, prover ProverInterf
 		proof, err = a.getAndLockProofReadyToVerify(ctx, lastVerifiedBatchNumber)
 		if errors.Is(err, state.ErrNotFound) {
 			// nothing to verify, swallow the error
-			tmpLogger.Debug("No proof ready to verify")
+			tmpLogger.Infof("No proof ready to verify lastVerifiedBatchNumber: %v", lastVerifiedBatchNumber)
 			return false, nil
 		}
 		if err != nil {
+			tmpLogger.Errorf("getAndLockProofReadyToVerify: err: %s", err.Error())
 			return false, err
 		}
 
@@ -719,9 +727,11 @@ func (a *Aggregator) tryBuildFinalProof(ctx context.Context, prover ProverInterf
 		// eligible to be verified
 		eligible, err := a.validateEligibleFinalProof(ctx, proof, lastVerifiedBatchNumber)
 		if err != nil {
-			return false, fmt.Errorf("failed to validate eligible final proof, %w", err)
+			tmpLogger.Errorf("validateEligibleFinalProof: fv validate eligible final proof %v,%v, %s", proof, lastVerifiedBatchNumber, err.Error())
+			return false, fmt.Errorf("fv validate eligible final proof, %w", err)
 		}
 		if !eligible {
+			tmpLogger.Errorf("validateEligibleFinalProof: !eligible proof %v,%v, %s", proof, lastVerifiedBatchNumber, err.Error())
 			return false, nil
 		}
 	}
@@ -746,8 +756,11 @@ func (a *Aggregator) tryBuildFinalProof(ctx context.Context, prover ProverInterf
 		finalProof:     finalProof,
 	}
 
+	tmpLogger.Info("sending to chan: a.finalProof <- msg:")
+
 	select {
 	case <-a.ctx.Done():
+		tmpLogger.Error("case <-a.ctx.Done():")
 		return false, a.ctx.Err()
 	case a.finalProof <- msg:
 	}
@@ -779,7 +792,7 @@ func (a *Aggregator) validateEligibleFinalProof(
 
 			return false, nil
 		} else {
-			a.logger.Debugf("Proof batch number %d is not the following to last verfied batch number %d",
+			a.logger.Infof("Proof batch number %d is not the following to last verfied batch number %d",
 				proof.BatchNumber, lastVerifiedBatchNum)
 			return false, nil
 		}
@@ -912,12 +925,12 @@ func (a *Aggregator) tryAggregateProofs(ctx context.Context, prover ProverInterf
 		"proverId", proverID,
 		"proverAddr", prover.Addr(),
 	)
-	tmpLogger.Debug("tryAggregateProofs start")
+	tmpLogger.Infof("tryAggregateProofs start")
 
 	proof1, proof2, err0 := a.getAndLockProofsToAggregate(ctx, prover)
 	if errors.Is(err0, state.ErrNotFound) {
 		// nothing to aggregate, swallow the error
-		tmpLogger.Debug("Nothing to aggregate")
+		tmpLogger.Infof("Nothing to aggregate")
 		return false, nil
 	}
 	if err0 != nil {
@@ -936,7 +949,7 @@ func (a *Aggregator) tryAggregateProofs(ctx context.Context, prover ProverInterf
 				tmpLogger.Errorf("Failed to release aggregated proofs, err: %v", err2)
 			}
 		}
-		tmpLogger.Debug("tryAggregateProofs end")
+		tmpLogger.Infof("tryAggregateProofs end")
 	}()
 
 	tmpLogger.Infof("Aggregating proofs: %d-%d and %d-%d",
@@ -1172,7 +1185,7 @@ func (a *Aggregator) getAndLockBatchToProve(
 	l1InfoRoot := common.Hash{}
 
 	if virtualBatch.L1InfoRoot == nil {
-		log.Debugf("L1InfoRoot is nil for batch %d", batchNumberToVerify)
+		log.Infof("L1InfoRoot is nil for batch %d", batchNumberToVerify)
 		virtualBatch.L1InfoRoot = &l1InfoRoot
 	}
 
