@@ -727,11 +727,11 @@ func (a *Aggregator) tryBuildFinalProof(ctx context.Context, prover ProverInterf
 		// eligible to be verified
 		eligible, err := a.validateEligibleFinalProof(ctx, proof, lastVerifiedBatchNumber)
 		if err != nil {
-			tmpLogger.Errorf("validateEligibleFinalProof: fv validate eligible final proof %v,%v, %s", proof, lastVerifiedBatchNumber, err.Error())
+			tmpLogger.Errorf("validateEligibleFinalProof: fv validate eligible final batch nums %v-%v,%v, %s", proof.BatchNumber, proof.BatchNumberFinal, lastVerifiedBatchNumber, err.Error())
 			return false, fmt.Errorf("fv validate eligible final proof, %w", err)
 		}
 		if !eligible {
-			tmpLogger.Errorf("validateEligibleFinalProof: !eligible proof %v,%v, %s", proof, lastVerifiedBatchNumber)
+			tmpLogger.Errorf("validateEligibleFinalProof: !eligible proof batch nums %v-%v, %v", proof.BatchNumber, proof.BatchNumberFinal, lastVerifiedBatchNumber)
 			return false, nil
 		}
 	}
@@ -792,8 +792,8 @@ func (a *Aggregator) validateEligibleFinalProof(
 
 			return false, nil
 		} else {
-			a.logger.Infof("Proof batch number %d is not the following to last verfied batch number %d",
-				proof.BatchNumber, lastVerifiedBatchNum)
+			a.logger.Infof("Proof batch numbers %d-%d is not the following to last verfied batch number %d. It should be like this %d == %d",
+				proof.BatchNumber, proof.BatchNumberFinal, lastVerifiedBatchNum, proof.BatchNumber, batchNumberToVerify)
 			return false, nil
 		}
 	}
